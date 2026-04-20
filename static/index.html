@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TrumpSearch — VSM IR Engine</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface2: #1a1a1a;
+      --border: #2a2a2a;
+      --accent: #e8c547;
+      --accent2: #c0392b;
+      --text: #e8e8e8;
+      --muted: #666;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+      --display: 'Bebas Neue', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ---- noise overlay ---- */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    /* ---- header ---- */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 0 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      position: sticky;
+      top: 0;
+      background: rgba(10,10,10,0.92);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+    }
+
+    .logo {
+      font-family: var(--display);
+      font-size: 26px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo span {
+      color: var(--accent2);
+    }
+
+    .logo-sub {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      border-left: 1px solid var(--border);
+      padding-left: 12px;
+      margin-left: 4px;
+    }
+
+    .stats-bar {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      gap: 20px;
+    }
+
+    .stats-bar .stat-val {
+      color: var(--accent);
+    }
+
+    /* ---- hero ---- */
+    .hero {
+      padding: 80px 40px 60px;
+      max-width: 900px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 4px;
+      color: var(--accent2);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    .hero h1 {
+      font-family: var(--display);
+      font-size: clamp(52px, 8vw, 96px);
+      line-height: 0.95;
+      letter-spacing: 2px;
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+      -webkit-text-stroke: 1px var(--accent);
+    }
+
+    .hero-desc {
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 300;
+      max-width: 480px;
+      line-height: 1.7;
+      margin-bottom: 40px;
+      font-family: var(--mono);
+    }
+
+    /* ---- search box ---- */
+    .search-wrap {
+      position: relative;
+      max-width: 700px;
+    }
+
+    .search-wrap input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 16px;
+      padding: 18px 140px 18px 24px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      letter-spacing: 0.5px;
+    }
+
+    .search-wrap input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 0 20px rgba(232, 197, 71, 0.08);
+    }
+
+    .search-wrap input::placeholder {
+      color: #444;
+    }
+
+    .search-btn {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      padding: 0 28px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      font-family: var(--display);
+      font-size: 16px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .search-btn:hover {
+      background: #f0d060;
+    }
+
+    .search-btn:active {
+      background: #c9a830;
+    }
+
+    /* ---- query chips ---- */
+    .query-chips {
+      margin-top: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 2px;
+      display: flex;
+      align-items: center;
+      margin-right: 4px;
+    }
+
+    .chip {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      background: transparent;
+      transition: all 0.15s;
+      letter-spacing: 0.5px;
+    }
+
+    .chip:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(232, 197, 71, 0.05);
+    }
+
+    /* ---- results area ---- */
+    .results-section {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 40px 80px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .results-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .results-meta .query-display {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .results-meta .query-display strong {
+      color: var(--accent);
+    }
+
+    .results-meta .count-badge {
+      font-family: var(--mono);
+      font-size: 11px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 4px 12px;
+      color: var(--text);
+    }
+
+    /* ---- result card ---- */
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid transparent;
+      padding: 24px;
+      margin-bottom: 12px;
+      transition: all 0.2s;
+      animation: slideIn 0.3s ease both;
+      cursor: default;
+    }
+
+    .result-card:hover {
+      border-left-color: var(--accent);
+      background: var(--surface2);
+      transform: translateX(2px);
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      gap: 16px;
+    }
+
+    .card-rank {
+      font-family: var(--display);
+      font-size: 32px;
+      color: var(--border);
+      line-height: 1;
+      min-width: 36px;
+      transition: color 0.2s;
+    }
+
+    .result-card:hover .card-rank {
+      color: var(--accent);
+    }
+
+    .card-title {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.4;
+    }
+
+    .card-meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .doc-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 3px 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      letter-spacing: 1px;
+    }
+
+    .score-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .score-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      min-width: 48px;
+      text-align: right;
+    }
+
+    .score-track {
+      width: 80px;
+      height: 3px;
+      background: var(--border);
+      position: relative;
+    }
+
+    .score-fill {
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.5s ease;
+    }
+
+    .card-snippet {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      font-weight: 300;
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+      margin-top: 12px;
+      font-family: var(--sans);
+    }
+
+    .card-snippet mark {
+      background: rgba(232, 197, 71, 0.2);
+      color: var(--accent);
+      padding: 0 2px;
+    }
+
+    /* ---- states ---- */
+    .empty-state {
+      text-align: center;
+      padding: 80px 40px;
+      color: var(--muted);
+    }
+
+    .empty-state .big-icon {
+      font-family: var(--display);
+      font-size: 72px;
+      color: var(--border);
+      margin-bottom: 16px;
+      display: block;
+      letter-spacing: 4px;
+    }
+
+    .empty-state p {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 2px;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 60px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 3px;
+    }
+
+    .loading.active { display: block; }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-msg {
+      display: none;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent2);
+      padding: 16px 24px;
+      border: 1px solid var(--accent2);
+      background: rgba(192, 57, 43, 0.08);
+      margin-bottom: 20px;
+    }
+
+    .error-msg.active { display: block; }
+
+    /* ---- doc count summary row ---- */
+    .doc-id-row {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 12px;
+      padding: 10px 16px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      letter-spacing: 0.5px;
+      line-height: 1.8;
+    }
+
+    .doc-id-row span {
+      color: #555;
+    }
+
+    /* ---- footer ---- */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 20px 40px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: #333;
+      letter-spacing: 2px;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      TRUMP<span>SEARCH</span>
+      <div class="logo-sub">VSM IR ENGINE</div>
+    </div>
+    <div class="stats-bar" id="statsBar">
+      <span>DOCS: <span class="stat-val" id="statDocs">—</span></span>
+      <span>TERMS: <span class="stat-val" id="statTerms">—</span></span>
+      <span>MODEL: <span class="stat-val">TF·IDF + COSINE</span></span>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="hero-label">// information retrieval · cs4051 · spring 2026</div>
+    <h1>SEARCH THE<br><em>SPEECHES</em></h1>
+    <p class="hero-desc">
+      Vector Space Model over 56 Trump speeches (2015–2016).<br>
+      TF-IDF weighted · Cosine similarity · α = 0.005
+    </p>
+
+    <div class="search-wrap">
+      <input
+        type="text"
+        id="searchInput"
+        placeholder="e.g. Hillary Clinton, pakistan afghanistan..."
+        autocomplete="off"
+      />
+      <button class="search-btn" id="searchBtn" onclick="doSearch()">SEARCH</button>
+    </div>
+
+    <div class="query-chips">
+      <span class="chip-label">TRY →</span>
+      <button class="chip" onclick="quickSearch('massive inflow of refugees')">massive inflow of refugees</button>
+      <button class="chip" onclick="quickSearch('Hillary Clinton')">Hillary Clinton</button>
+      <button class="chip" onclick="quickSearch('pakistan afghanistan')">pakistan afghanistan</button>
+      <button class="chip" onclick="quickSearch('American Energy Revolution')">American Energy Revolution</button>
+      <button class="chip" onclick="quickSearch('no patience for injustice')">no patience for injustice</button>
+      <button class="chip" onclick="quickSearch('muslims')">muslims</button>
+    </div>
+  </div>
+
+  <div class="results-section">
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="loading" id="loading">
+      <div class="spinner"></div><br>COMPUTING COSINE SIMILARITY...
+    </div>
+
+    <div id="resultsMeta" style="display:none" class="results-meta">
+      <div class="query-display">Results for: <strong id="queryDisplay"></strong></div>
+      <div class="count-badge" id="countBadge"></div>
+    </div>
+
+    <div id="docIdRow" class="doc-id-row" style="display:none">
+      <span>RETRIEVED DOC IDs →</span> <span id="docIdList"></span>
+    </div>
+
+    <div id="resultsContainer">
+      <div class="empty-state">
+        <span class="big-icon">VSM</span>
+        <p>ENTER A QUERY TO BEGIN RETRIEVAL</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>IR ASSIGNMENT 2 · VECTOR SPACE MODEL · TF-IDF · COSINE SIMILARITY · α=0.005</footer>
+
+  <script>
+    // load stats on page load
+    fetch('/stats')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('statDocs').textContent = data.total_docs;
+        document.getElementById('statTerms').textContent = data.total_terms.toLocaleString();
+      });
+
+    document.getElementById('searchInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doSearch();
+    });
+
+    function quickSearch(q) {
+      document.getElementById('searchInput').value = q;
+      doSearch();
+    }
+
+    function doSearch() {
+      const query = document.getElementById('searchInput').value.trim();
+      if (!query) return;
+
+      // show loading
+      document.getElementById('loading').classList.add('active');
+      document.getElementById('resultsContainer').innerHTML = '';
+      document.getElementById('resultsMeta').style.display = 'none';
+      document.getElementById('docIdRow').style.display = 'none';
+      document.getElementById('errorMsg').classList.remove('active');
+
+      fetch(`/search?q=${encodeURIComponent(query)}`)
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById('loading').classList.remove('active');
+
+          if (data.error) {
+            showError(data.error);
+            return;
+          }
+
+          renderResults(data);
+        })
+        .catch(err => {
+          document.getElementById('loading').classList.remove('active');
+          showError('Could not connect to server. Is Flask running?');
+        });
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = '// ERROR: ' + msg;
+      el.classList.add('active');
+    }
+
+    function highlightTerms(text, query) {
+      if (!query) return text;
+      // simple highlight of query words in snippet
+      const words = query.split(/\s+/).filter(w => w.length > 2);
+      let result = text;
+      words.forEach(word => {
+        const re = new RegExp(`(${word})`, 'gi');
+        result = result.replace(re, '<mark>$1</mark>');
+      });
+      return result;
+    }
+
+    function renderResults(data) {
+      const container = document.getElementById('resultsContainer');
+
+      // update meta bar
+      document.getElementById('queryDisplay').textContent = data.query;
+      document.getElementById('countBadge').textContent =
+        `${data.count} DOCUMENT${data.count !== 1 ? 'S' : ''} RETRIEVED`;
+      document.getElementById('resultsMeta').style.display = 'flex';
+
+      // doc id summary row
+      if (data.results.length > 0) {
+        const ids = data.results.map(r => r.doc_id).join(', ');
+        document.getElementById('docIdList').textContent = `{${ids}}`;
+        document.getElementById('docIdRow').style.display = 'block';
+      }
+
+      if (data.count === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <span class="big-icon">∅</span>
+            <p>NO DOCUMENTS ABOVE THRESHOLD (α=0.005)</p>
+          </div>`;
+        return;
+      }
+
+      // find max score for bar scaling
+      const maxScore = data.results[0].score;
+
+      container.innerHTML = '';
+      data.results.forEach((r, i) => {
+        const barWidth = Math.round((r.score / maxScore) * 100);
+        const snippet = highlightTerms(r.snippet, data.query);
+
+        const card = document.createElement('div');
+        card.className = 'result-card';
+        card.style.animationDelay = `${i * 30}ms`;
+        card.innerHTML = `
+          <div class="card-top">
+            <div class="card-rank">${String(i + 1).padStart(2, '0')}</div>
+            <div class="card-title">${r.title || r.filename}</div>
+            <div class="card-meta">
+              <div class="doc-badge">DOC #${r.doc_id}</div>
+              <div class="score-bar-wrap">
+                <div class="score-label">${r.score.toFixed(4)}</div>
+                <div class="score-track">
+                  <div class="score-fill" style="width: ${barWidth}%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-snippet">${snippet}</div>
+        `;
+        container.appendChild(card);
+      });
+    }
+  </script>
+</body>
+</html>
