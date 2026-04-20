@@ -1,0 +1,20 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Generated index file (rebuild with: python vsm.py)
+vsm_index.json
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# OS stuff
+.DS_Store
+Thumbs.db
+
+# IDE folders
+.vscode/
+.idea/

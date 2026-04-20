@@ -49,7 +49,8 @@ def get_snippet(doc_num, query_terms, length=300):
 
 def get_title(doc_num):
     """Get the first line (title) of a speech."""
-    path = f'./speeches/Trump Speechs/Trump Speechs/speech_{doc_num}.txt'
+    # path = f'./speeches/Trump Speechs/Trump Speechs/speech_{doc_num}.txt'
+    path = f'./speeches/speech_{doc_num}.txt'
     try:
         with open(path, 'r', errors='ignore') as f:
             first_line = f.readline().strip()
